@@ -8,7 +8,7 @@ const purgecss = [
 module.exports = {
   plugins: [
     "postcss-import",
-    require("tailwindcss")("./tailwindcss-config.js"),
+    "tailwindcss",
     "autoprefixer",
     ...(process.env.NODE_ENV === "production" ? [purgecss] : []),
   ],
