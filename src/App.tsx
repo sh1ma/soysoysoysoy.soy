@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import useInterval from 'use-interval'
 import './App.css'
 import useSound from 'use-sound'
