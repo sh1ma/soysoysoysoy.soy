@@ -26,7 +26,7 @@ function App() {
     if (soyCount > bestScore) {
       await setBestScore(soyCount)
     }
-    // await setSoyCount(0)
+    await setSoyCount(0)
   }, 5000)
 
   return (
