@@ -1,52 +1,147 @@
-import React, { useState } from 'react'
-import useInterval from 'use-interval'
-import './App.css'
-import useSound from 'use-sound'
-import SoySound from './sound/soy.mp3'
-import { PlayFunction } from 'use-sound/dist/types'
-
-type SoyButtonProps = {
-  playFunc: PlayFunction
-}
-
-const SoyButton: React.FC<SoyButtonProps> = ({ playFunc }) => {
-  return (
-    <button className='soy-button' onClick={() => playFunc()}>
-      そい
-    </button>
-  )
-}
+import { useEffect, useRef, useState } from "react"
+import "./App.css"
 
 function App() {
-  const [play] = useSound(SoySound)
-  const [soyCount, setSoyCount] = useState(0)
-  const [bestScore, setBestScore] = useState(0)
+  const GAME_DURATION_MS = 5_000
+  const TICK_MS = 100
+  const AUDIO_POOL_SIZE = 6
 
-  useInterval(async () => {
-    if (soyCount > bestScore) {
-      await setBestScore(soyCount)
+  const [timeLeftMs, setTimeLeftMs] = useState<number>(GAME_DURATION_MS)
+  const [score, setScore] = useState<number>(0)
+  const [isRunning, setIsRunning] = useState<boolean>(false)
+  const audioPoolRef = useRef<HTMLAudioElement[] | null>(null)
+  const audioIndexRef = useRef<number>(0)
+
+  // prepare audio pool once
+  useEffect(() => {
+    const pool: HTMLAudioElement[] = []
+    for (let i = 0; i < AUDIO_POOL_SIZE; i++) {
+      const audio = new Audio("/soy.wav")
+      audio.preload = "auto"
+      pool.push(audio)
     }
-    await setSoyCount(0)
-  }, 5000)
+    audioPoolRef.current = pool
+    return () => {
+      // cleanup
+      audioPoolRef.current?.forEach((a) => {
+        a.pause()
+        a.src = ""
+      })
+      audioPoolRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isRunning) return
+
+    const intervalId = setInterval(() => {
+      setTimeLeftMs((prev) => {
+        const next = Math.max(0, prev - TICK_MS)
+        if (next === 0) {
+          clearInterval(intervalId)
+          setIsRunning(false)
+        }
+        return next
+      })
+    }, TICK_MS)
+
+    return () => clearInterval(intervalId)
+  }, [isRunning])
+
+  const startGame = () => {
+    setScore(0)
+    setTimeLeftMs(GAME_DURATION_MS)
+    setIsRunning(true)
+  }
+
+  const resetGame = () => {
+    setIsRunning(false)
+    setScore(0)
+    setTimeLeftMs(GAME_DURATION_MS)
+  }
+
+  const handleClick = () => {
+    if (!isRunning) return
+    setScore((s) => s + 1)
+    // play sound
+    const pool = audioPoolRef.current
+    if (pool && pool.length > 0) {
+      const idx = audioIndexRef.current % pool.length
+      audioIndexRef.current = (audioIndexRef.current + 1) % pool.length
+      const audio = pool[idx]
+      try {
+        // rewind and play; allow overlapping via pool
+        audio.currentTime = 0
+        void audio.play()
+      } catch {
+        // ignore playback errors (e.g., autoplay restrictions)
+      }
+    }
+  }
+
+  const secondsLeft = (timeLeftMs / 1000).toFixed(1)
+  const isFinished = !isRunning && timeLeftMs === 0
+  const shareText = `あなたのそい❣は${score}回でした https://soysoysoysoy.soy #soysoysoysoysoy`
+  const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+    shareText
+  )}`
 
   return (
-    <div className='App'>
-      <header className='App-header'>
-        <div onClick={() => bestScore}>
-          <a
-            href={`https://twitter.com/share?url=soysoysoysoy.soy&text=あなたのそい❣は${bestScore}回でした&hashtags=soysoysoysoysoy`}
-            target='_blank'
-            rel='noreferrer'
-          >
-            <p>Tweet</p>
-          </a>
+    <div className="game-root">
+      <h1>soysoysoysoy.soy</h1>
+      <div className="hud">
+        <div className="timer" aria-live="polite">
+          残り時間: {secondsLeft}s
         </div>
-        <h3>5秒で0にリセットされます 最高記録: {bestScore}そい❣</h3>
-        <div onClick={() => setSoyCount(soyCount + 1)}>
-          <SoyButton playFunc={play} />
+        <div className="score" aria-live="polite">
+          連打数: {score}
         </div>
-        <h3>そい: {soyCount}</h3>
-      </header>
+      </div>
+
+      <div className="controls">
+        {!isRunning && !isFinished && (
+          <button className="primary" onClick={startGame}>
+            スタート
+          </button>
+        )}
+
+        <button
+          className="tap"
+          onClick={handleClick}
+          disabled={!isRunning}
+          aria-disabled={!isRunning}
+        >
+          そい❣
+        </button>
+
+        {!isRunning && isFinished && (
+          <>
+            <button className="secondary" onClick={startGame}>
+              もう一度
+            </button>
+            <a
+              className="secondary"
+              href={shareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Twitterでシェア
+            </a>
+          </>
+        )}
+
+        {!isRunning && !isFinished && (
+          <button className="secondary" onClick={resetGame}>
+            リセット
+          </button>
+        )}
+      </div>
+
+      {isFinished && (
+        <div className="result" role="status">
+          あなたのそい❣は {score} 回でした
+        </div>
+      )}
     </div>
   )
 }
